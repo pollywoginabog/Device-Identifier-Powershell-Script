@@ -7,14 +7,12 @@
     ===========================================================================
     .DESCRIPTION
     	Queries WMI for monitor serial numbers and general identifying device information.
-    #>
+#>
 
 [CmdletBinding()]
 param ()
 
 Begin {
-    
-
     # Function to convert ASCII codes to a string
     function ASCIItoString($asciiStr) {
         $charArray = $asciiStr -split ","
@@ -44,47 +42,70 @@ Begin {
 
     Write-Output "Gathering System Info..."
 
-    # Create the output file
-    $outputFile = "device_info.txt"
-    $fs = New-Object IO.StreamWriter($outputFile, $false)
+    # Create the output list
+    $outputList = @()
 }
 
 Process {
     # Get the computer name
     $computerName = $env:COMPUTERNAME
-    $fs.WriteLine($computerName)
 
     # Get the MAC Address
     $macAddress = Get-MACAddress
-    $fs.WriteLine($macAddress)
 
     # Get the Serial Number
     $serialNumber = Get-SerialNumber
-    $fs.WriteLine($serialNumber + "`n")
+
+    # Add system info to the output list
+    $outputList += [PSCustomObject]@{
+        Type = "System"
+        ComputerName = $computerName
+        MACAddress = $macAddress
+        SerialNumber = $serialNumber
+        Active = ""
+        Manufacturer = ""
+        ProductCodeID = ""
+        ServiceTag_SerialNumber = ""
+        ModelName = ""
+        WeekOfManufacture = ""
+        YearOfManufacture = ""
+    }
 
     Write-Output "Gathering Monitor(s)..."
     # Query WMI for monitor information
     $query = "SELECT * FROM WmiMonitorID"
     $objWMIService = Get-WmiObject -Query $query -Namespace "root\wmi"
-
+    
     foreach ($objItem in $objWMIService) {
-        $r = "Active: " + $objItem.Active + "`n"
-        $r += "InstanceName: " + $objItem.InstanceName + "`n"
-        $r += "Manufacturer: " + (ASCIItoString -asciiStr ($objItem.ManufacturerName -join ",")) + "`n"
-        $r += "ProductCodeID: " + (ASCIItoString -asciiStr ($objItem.ProductCodeID -join ",")) + "`n"
-        $r += "ServiceTag/SerialNumber: " + (ASCIItoString -asciiStr ($objItem.SerialNumberID -join ",")) + "`n"
-        $r += "ModelName: " + (ASCIItoString -asciiStr ($objItem.UserFriendlyName -join ",")) + "`n"
-        $r += "WeekOfManufacture: " + $objItem.WeekOfManufacture + "`n"
-        $r += "YearOfManufacture: " + $objItem.YearOfManufacture + "`n"
-        $r += "`n"
-
-        $fs.WriteLine($r)
+       $counter = $counter + 1
+        $outputList += [PSCustomObject]@{
+            Type = "Monitor " + $counter
+            ComputerName = ""
+            MACAddress = ""
+            SerialNumber = ""
+            Active = $objItem.Active
+            Manufacturer = (ASCIItoString -asciiStr ($objItem.ManufacturerName -join ","))
+            ProductCodeID = (ASCIItoString -asciiStr ($objItem.ProductCodeID -join ","))
+            ServiceTag_SerialNumber = (ASCIItoString -asciiStr ($objItem.SerialNumberID -join ","))
+            ModelName = (ASCIItoString -asciiStr ($objItem.UserFriendlyName -join ","))
+            WeekOfManufacture = $objItem.WeekOfManufacture
+            YearOfManufacture = $objItem.YearOfManufacture
+            
+        }
     }
 }
 
 End {
-    # Close the file
-    $fs.Close()
+    # Export the list to a CSV file
+    $outputFile = "device_info.csv"
+    if (Test-Path $outputFile)
+			{
+				$outputList += Import-CSV -Path $outputFile
+			}
+        $outputList | Export-Csv -Path $outputFile -NoTypeInformation
+    
+    
+    
 
     Write-Output "System information has been written to $outputFile"
     Pause
